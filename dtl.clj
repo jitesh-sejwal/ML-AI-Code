@@ -59,11 +59,7 @@
         (let [part (partition-dataset dataset target-attr value)]
           (if (every? #(= (*result* (first part)) (*result* %)) part)
             (assoc ret value {*result* (*result* (first part))})
-            (assoc
-              ret
-              value
-              (#'make-tree
-                (partition-dataset dataset target-attr value))))))
+            (assoc ret value (make-tree part)))))
       {}
       (distinct (map target-attr dataset)))))
 
