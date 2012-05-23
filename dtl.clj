@@ -3,7 +3,9 @@
 ;; References: Machine Learning - Mitchell, Macthine Learning in Action
 ;;
 ;; Author: Jitesh Sejwal
-(use 'clojure.contrib.def)
+(ns user
+  (:use [clojure.contrib.def])
+  (:use [clojure.set :only [difference]]))
 
 (defn lg [x]
   (/ (Math/log x) (Math/log 2)))
@@ -18,13 +20,18 @@
       #(let [p (/ % (count u))] (* -1 p (lg p)))
       (vals (frequencies (map *result* u))))))
 
-(defn partition-dataset
-  ([dataset attr]
-    (map
-      #(partition-dataset dataset attr %)
-      (distinct (map attr dataset))))
-  ([dataset attr value]
-    (for [v dataset :when (= (attr v) value)] (dissoc v attr))))
+(defn subdataset-attr-val [dataset attr val]
+  "Returns the sub-dataset of dataset such that each element's
+   attribute attr has value val."
+  (filter #(= (get % attr) val) dataset))
+
+(defn partition-dataset [dataset attr]
+  "Partitions dataset around the attribute attr. Each element is a 
+   sub-dataset of dataset such that all elements of that dataset have
+   the same value for the attribute attr."
+  (map
+    #(subdataset-attr-val dataset attr %)
+    (distinct (map attr dataset))))
 
 (defn info-gain [dataset attr]
   (-
@@ -34,34 +41,37 @@
       0
       (partition-dataset dataset attr))))
 
-(defn max-info-gain-attr [dataset]
+(defn max-info-gain-attr [dataset attrs]
   (reduce
     (fn [x y] (max-key #(info-gain dataset %) x y))
-    (remove #(= *result* %) (keys (first dataset)))))
-
-(defn empty-attrs? [dataset]
-  (if-let [k (keys dataset)]
-    (and (= (count k) 1) (= *result* (first k)))))
+    attrs))
 
 (defn result-with-max-frequency [dataset]
-   (first
-         (reduce
-           #(if (> (second %1) (second %2)) %1 %2)
-           (seq (frequencies (map *result* dataset))))))
+  (first
+    (reduce
+      #(if (> (second %1) (second %2)) %1 %2)
+      (seq (frequencies (map *result* dataset))))))
 
 (defn id3
   ([dataset]
-    (if (empty-attrs? dataset)
+    (id3
+      dataset
+      (set (remove #(= *result* %) (keys (first dataset))))))
+  ([dataset attrs]
+    (if (empty? attrs)
       {*result* (result-with-max-frequency dataset)}
-      (let [max-attr (max-info-gain-attr dataset)]
-        (assoc {} max-attr (id3 dataset max-attr)))))
-  ([dataset target-attr]
+      (let [max-attr (max-info-gain-attr dataset attrs)]
+        (assoc {} max-attr (id3 dataset max-attr attrs)))))
+  ([dataset target-attr attrs]
     (reduce
       (fn [ret value]
-        (let [part (partition-dataset dataset target-attr value)]
-          (if (every? #(= (*result* (first part)) (*result* %)) part)
-            (assoc ret value {*result* (*result* (first part))})
-            (assoc ret value (id3 part)))))
+        (let [sub-attr-val (subdataset-attr-val dataset target-attr value)]
+          (if (every? #(= (*result* (first sub-attr-val)) (*result* %)) sub-attr-val)
+            (assoc ret value {*result* (*result* (first sub-attr-val))})
+            (assoc
+              ret
+              value
+              (id3 sub-attr-val (difference attrs #{target-attr}))))))
       {}
       (distinct (map target-attr dataset)))))
 
@@ -75,7 +85,7 @@
             ('classify0 t2 input)))))))
 
 (defn unit-tests []
-  (let [tennis [{:outlook "Sunny",
+  (do (let [tennis [{:outlook "Sunny",
                  :temperature "Hot",
                  :humidity "High",
                  :wind "Weak",
@@ -145,7 +155,7 @@
                  :humidity "High",
                  :wind "Strong",
                  :result "No"}]]
-    (assert (= :outlook (max-info-gain-attr tennis)))
+    (assert (= :outlook (max-info-gain-attr tennis #{:outlook :wind :temperature :humidity})))
     (assert (< (- (entropy tennis) 0.94) 5.0E-4))
     (assert
       (=
@@ -156,6 +166,150 @@
           "Sunny"
           {:humidity
            {"Normal" {:result "Yes"}, "High" {:result "No"}}}}}
-        (id3 tennis)))
+        (id3 tennis #{:outlook :wind :temperature :humidity})))
+    :passed)
+  (let [lenses [{:age"young",
+                 :spectacle-prescription "myope",
+                 :tear-production-rate "reduced",
+                 :astigmatic "no",
+                 :result "no-lenses"}
+                {:age "young",
+                 :spectacle-prescription "myope",
+                 :tear-production-rate "normal",
+                 :astigmatic "no",
+                 :result "soft"}
+                {:age "young",
+                 :spectacle-prescription "myope",
+                 :tear-production-rate "reduced",
+                 :astigmatic "yes",
+                 :result "no-lenses"}
+                {:age "young",
+                 :spectacle-prescription "myope",
+                 :tear-production-rate "normal",
+                 :astigmatic "yes",
+                 :result "hard"}
+                {:age "young",
+                 :spectacle-prescription "hypermetrope",
+                 :tear-production-rate "reduced",
+                 :astigmatic "no",
+                 :result "no-lenses"}
+                {:age "young",
+                 :spectacle-prescription "hypermetrope",
+                 :tear-production-rate "normal",
+                 :astigmatic "no",
+                 :result "soft"}
+                {:age "young",
+                 :spectacle-prescription "hypermetrope",
+                 :tear-production-rate "reduced",
+                 :astigmatic "yes",
+                 :result "no-lenses"}
+                {:age "young",
+                 :spectacle-prescription "hypermetrope",
+                 :tear-production-rate "normal",
+                 :astigmatic "yes",
+                 :result "hard"}
+                {:age "pre-presbyopic",
+                 :spectacle-prescription "myope",
+                 :tear-production-rate "reduced",
+                 :astigmatic "no",
+                 :result "no-lenses"}
+                {:age "pre-presbyopic",
+                 :spectacle-prescription "myope",
+                 :tear-production-rate "normal",
+                 :astigmatic "no",
+                 :result "soft"}
+                {:age "pre-presbyopic",
+                 :spectacle-prescription "myope",
+                 :tear-production-rate "reduced",
+                 :astigmatic "yes",
+                 :result "no-lenses"}
+                {:age "pre-presbyopic",
+                 :spectacle-prescription "myope",
+                 :tear-production-rate "normal",
+                 :astigmatic "yes",
+                 :result "hard"}
+                {:age "pre-presbyopic",
+                 :spectacle-prescription "hypermetrope",
+                 :tear-production-rate "reduced",
+                 :astigmatic "no",
+                 :result "no-lenses"}
+                {:age "pre-presbyopic",
+                 :spectacle-prescription "hypermetrope",
+                 :tear-production-rate "normal",
+                 :astigmatic "no",
+                 :result "soft"}
+                {:age "pre-presbyopic",
+                 :spectacle-prescription "hypermetrope",
+                 :tear-production-rate "reduced",
+                 :astigmatic "yes",
+                 :result "no-lenses"}
+                {:age "pre-presbyopic",
+                 :spectacle-prescription "hypermetrope",
+                 :tear-production-rate "normal",
+                 :astigmatic "yes",
+                 :result "no-lenses"}
+                {:age "presbyopic",
+                 :spectacle-prescription "myope",
+                 :tear-production-rate "reduced",
+                 :astigmatic "no",
+                 :result "no-lenses"}
+                {:age "presbyopic",
+                 :spectacle-prescription "myope",
+                 :tear-production-rate "normal",
+                 :astigmatic "no",
+                 :result "no-lenses"}
+                {:age "presbyopic",
+                 :spectacle-prescription "myope",
+                 :tear-production-rate "reduced",
+                 :astigmatic "yes",
+                 :result "no-lenses"}
+                {:age "presbyopic",
+                 :spectacle-prescription "myope",
+                 :tear-production-rate "normal",
+                 :astigmatic "yes",
+                 :result "hard"}
+                {:age "presbyopic",
+                 :spectacle-prescription "hypermetrope",
+                 :tear-production-rate "reduced",
+                 :astigmatic "no",
+                 :result "no-lenses"}
+                {:age "presbyopic",
+                 :spectacle-prescription "hypermetrope",
+                 :tear-production-rate "normal",
+                 :astigmatic "no",
+                 :result "soft"}
+                {:age "presbyopic",
+                 :spectacle-prescription "hypermetrope",
+                 :tear-production-rate "reduced",
+                 :astigmatic "yes",
+                 :result "no-lenses"}
+                {:age "presbyopic",
+                 :spectacle-prescription "hypermetrope",
+                 :tear-production-rate "normal",
+                 :astigmatic "yes",
+                 :result "no-lenses"}]]
+    (assert
+      (=
+        {:tear-production-rate
+         {"normal"
+          {:astigmatic
+           {"yes"
+            {:spectacle-prescription
+             {"hypermetrope"
+              {:age
+               {"presbyopic" {:result "no-lenses"},
+                "pre-presbyopic" {:result "no-lenses"},
+                "young" {:result "hard"}}},
+              "myope" {:result "hard"}}},
+            "no"
+            {:age
+             {"presbyopic"
+              {:spectacle-prescription
+               {"hypermetrope" {:result "soft"},
+                "myope" {:result "no-lenses"}}},
+              "pre-presbyopic" {:result "soft"},
+              "young" {:result "soft"}}}}},
+          "reduced" {:result "no-lenses"}}}
+        (id3 lenses #{:age :astigmatic :spectacle-prescription :tear-production-rate})))
     :passed))
-
+  :all-passed)
