@@ -43,23 +43,25 @@
   (if-let [k (keys dataset)]
     (and (= (count k) 1) (= *result* (first k)))))
 
+(defn result-with-max-frequency [dataset]
+   (first
+         (reduce
+           #(if (> (second %1) (second %2)) %1 %2)
+           (seq (frequencies (map *result* dataset))))))
+
 (defn id3
   ([dataset]
     (if (empty-attrs? dataset)
-      {*result*
-       (first
-         (reduce
-           #(if (> (second %1) (second %2)) %1 %2)
-           (seq (frequencies (map *result* dataset)))))}
+      {*result* (result-with-max-frequency dataset)}
       (let [max-attr (max-info-gain-attr dataset)]
-        (assoc {} max-attr (#'make-tree dataset max-attr)))))
+        (assoc {} max-attr (id3 dataset max-attr)))))
   ([dataset target-attr]
     (reduce
       (fn [ret value]
         (let [part (partition-dataset dataset target-attr value)]
           (if (every? #(= (*result* (first part)) (*result* %)) part)
             (assoc ret value {*result* (*result* (first part))})
-            (assoc ret value (make-tree part)))))
+            (assoc ret value (id3 part)))))
       {}
       (distinct (map target-attr dataset)))))
 
@@ -70,7 +72,7 @@
       (if-let [valu (key input)]
         (if-let [t (get tree key)]
           (if-let [t2  (get t valu)]
-            (#'classify0 t2 input)))))))
+            ('classify0 t2 input)))))))
 
 (defn unit-tests []
   (let [tennis [{:outlook "Sunny",
@@ -156,5 +158,4 @@
            {"Normal" {:result "Yes"}, "High" {:result "No"}}}}}
         (id3 tennis)))
     :passed))
-
 
